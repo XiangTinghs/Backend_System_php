@@ -1,0 +1,65 @@
+
+services:
+  # PHP 8.3 + Laravel
+  php:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: backend_system_php
+    working_dir: /var/www
+    volumes:
+      - ./src:/var/www
+    networks:
+      - backend_network
+
+  # Nginx Web Server
+  nginx:
+    image: nginx:stable-alpine
+    container_name: backend_system_nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - ./src:/var/www:ro
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - php
+    networks:
+      - backend_network
+
+  # MySQL 8.4 Database
+  mysql:
+    image: mysql:8.4
+    container_name: backend_system_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: laravel
+      MYSQL_ROOT_PASSWORD: local_root_password
+      MYSQL_USER: laravel
+      MYSQL_PASSWORD: local_password
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test:
+        - CMD
+        - mysqladmin
+        - ping
+        - -h
+        - 127.0.0.1
+        - -uroot
+        - -plocal_root_password
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend_network
+
+# MySQL 資料持久化
+volumes:
+  mysql_data:
+
+# Docker 專用網路
+networks:
+  backend_network:
+    driver: bridge
