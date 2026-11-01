@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureAdminHasPermission;
 use App\Http\Middleware\EnsureAdminIsActive;
 use App\Http\Middleware\EnsureAdminTokenAuthenticated;
 use Illuminate\Foundation\Application;
@@ -18,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'admin.token' => EnsureAdminTokenAuthenticated::class,
             'admin.active' => EnsureAdminIsActive::class,
+            'admin.permission' => EnsureAdminHasPermission::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
