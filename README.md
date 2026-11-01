@@ -1,8 +1,8 @@
 # Backend System PHP
 
-基於 **Laravel 13、PHP、MySQL 與 Docker** 建立的企業內部後端管理系統。
+A backend management system built with **Laravel 13, PHP, MySQL, and Docker**, designed to simulate a real-world internal enterprise management platform.
 
-本專案以實際企業內部系統為開發情境，著重於 RESTful API 設計、資料庫操作、身分驗證、權限管理及自動化測試，並持續改善系統的可維護性與擴充性。
+This project focuses on RESTful API development, database operations, authentication, authorization, and automated testing, with an emphasis on maintainability, scalability, and clean application architecture.
 
 ## Tech Stack
 
@@ -19,65 +19,67 @@
 
 ## Project Architecture
 
-本專案採用 Docker Compose 管理開發環境，並將 Laravel 應用程式與 Docker 設定分離。
+The project uses Docker Compose to manage the local development environment, separating the Laravel application source code from the Docker infrastructure configuration.
 
 ```text
 Backend_System_php/
 ├── docker/
 │   ├── nginx/
-│   │   └── default.conf       # Nginx 設定
+│   │   └── default.conf       # Nginx Configuration
 │   └── php/
-│       └── Dockerfile        # PHP 環境建置
+│       └── Dockerfile        # PHP Container Configuration
 ├── src/                      # Laravel Application
 │   ├── app/                  # Application Logic
 │   ├── bootstrap/            # Application Bootstrap
-│   ├── config/               # Configuration
+│   ├── config/               # Application Configuration
 │   ├── database/             # Migrations / Seeders
 │   ├── routes/               # Route Definitions
 │   └── tests/                # Automated Tests
 ├── .gitignore
-├── docker-compose.yml        # Docker Services
+├── docker-compose.yml        # Docker Compose Services
 └── README.md                 # Project Documentation
 ```
 
 ### Application Design
 
-Laravel 應用程式依照職責分離：
+The Laravel application follows a separation-of-concerns approach, with responsibilities organized across framework components.
 
-- **Controller**：處理 HTTP Request 與 API Response。
-- **Form Request**：驗證 API 輸入資料。
-- **Middleware**：處理身分驗證及存取控制。
-- **Model**：透過 Eloquent ORM 操作資料庫。
-- **Migration**：管理資料庫結構。
-- **Feature Test**：驗證 API 行為及預期結果。
+- **Controller**: Handles incoming HTTP requests and returns API responses.
+- **Form Request**: Validates incoming API request data.
+- **Middleware**: Handles authentication and access control.
+- **Model**: Manages database interactions using Eloquent ORM.
+- **Migration**: Defines and maintains database schemas.
+- **Feature Tests**: Verify API behavior, validation rules, and expected responses.
 
 ## Features
 
 ### Implemented
 
-- [x] Laravel 專案初始化
-- [x] Docker 開發環境建置
-- [x] MySQL 資料庫整合
-- [x] 管理員帳號資料結構
-- [x] 管理員登入 API
-- [x] Token 身分驗證
-- [x] Request Validation
-- [x] Automated Feature Tests
+- [x] Laravel project initialization
+- [x] Docker-based development environment
+- [x] MySQL database integration
+- [x] Administrator account database structure
+- [x] Administrator login API
+- [x] Token-based authentication
+- [x] Request validation
+- [x] Automated feature tests
 
 ### Planned
 
-- [ ] 管理員帳號管理功能
-- [ ] Role-Based Access Control（RBAC）
-- [ ] API 操作紀錄
-- [ ] Redis 快取整合
-- [ ] API Documentation
-- [ ] CI/CD Pipeline
+- [ ] Administrator account management
+- [ ] Role-Based Access Control (RBAC)
+- [ ] API activity logging
+- [ ] Redis caching integration
+- [ ] API documentation
+- [ ] CI/CD pipeline
 
 ## Development Environment
 
-使用 Docker Compose 建立本機開發環境。
+The local development environment is managed using Docker Compose.
 
 ### Start Containers
+
+Build and start the required services:
 
 ```bash
 docker compose up -d --build
@@ -85,11 +87,15 @@ docker compose up -d --build
 
 ### Check Container Status
 
+Verify that the containers are running:
+
 ```bash
 docker compose ps
 ```
 
 ### Stop Containers
+
+Stop and remove the project containers:
 
 ```bash
 docker compose down
@@ -97,26 +103,28 @@ docker compose down
 
 ## Testing
 
-本專案使用 Laravel 內建測試工具執行自動化測試。
+The project uses Laravel's built-in testing tools to validate application functionality and API behavior.
 
-在 Laravel 應用程式環境內執行：
+Run the test suite from the Laravel application environment:
 
 ```bash
 php artisan test
 ```
 
-測試主要涵蓋 API 輸入驗證、管理員登入及身分驗證等功能。
+The automated tests primarily cover request validation, administrator login, authentication, and expected API responses.
 
 ## Development Goals
 
-- 建立具備可維護性及擴充性的 RESTful API。
-- 實作企業內部管理系統常見功能。
-- 透過 Docker 統一開發環境。
-- 使用自動化測試驗證核心功能。
-- 持續改善程式架構與開發流程。
+The primary goals of this project are:
+
+- Build maintainable and extensible RESTful APIs.
+- Implement common features found in enterprise internal management systems.
+- Establish a consistent development environment using Docker.
+- Improve software reliability through automated testing.
+- Continuously enhance application architecture, code quality, and development workflows.
 
 ## Project Status
 
 **Under Development**
 
-本專案持續開發中，功能與技術文件將隨開發進度更新。
+This project is actively being developed. Features, architecture, and technical documentation will be updated as development progresses.
