@@ -151,6 +151,17 @@ class AdminPermissionMiddlewareTest extends TestCase
             ->assertForbidden()->assertExactJson(['message' => 'Forbidden.']);
     }
 
+    public function test_hyphenated_permission_is_valid_but_requires_explicit_grant(): void
+    {
+        $admin = Admin::factory()->create();
+        $token = $admin->createToken('hyphen')->plainTextToken;
+        $this->registerPermissionRoute('/api/testing/hyphen', 'admin.permission:audit-logs.view');
+        $this->withToken($token)->getJson('/api/testing/hyphen')->assertForbidden();
+        $this->grant($admin, 'reader', 'audit-logs.view');
+        app('auth')->forgetGuards();
+        $this->withToken($token)->getJson('/api/testing/hyphen')->assertOk();
+    }
+
     public static function invalidPermissionParameters(): array
     {
         return [
@@ -160,6 +171,8 @@ class AdminPermissionMiddlewareTest extends TestCase
             'uppercase' => ['admin.permission:Admins.Read'],
             'whitespace' => ['admin.permission:admins. read'],
             'wildcard' => ['admin.permission:admins.*'],
+            'leading hyphen' => ['admin.permission:-audit.view'],
+            'illegal symbol' => ['admin.permission:audit/logs.view'],
             'empty segment' => ['admin.permission:admins..read'],
             'too long' => ['admin.permission:' . str_repeat('a', 101)],
         ];

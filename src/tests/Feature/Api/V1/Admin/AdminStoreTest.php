@@ -156,21 +156,44 @@ class AdminStoreTest extends TestCase
         $this->assertSame($before, Admin::count());
     }
 
-    public function test_username_unique_race_returns_validation_error(): void
+    public function test_username_unique_conflict_after_validation_rolls_back_without_audit_log(): void
     {
         $this->authenticate();
+        $payload = $this->payload();
+        $callbackCount = 0;
+        $insertedId = null;
+        $before = Admin::count();
+        $auditBefore = DB::table('audit_logs')->count();
+        $transactionLevel = DB::connection()->transactionLevel();
+        $this->assertDatabaseMissing('admins', ['username' => $payload['username']]);
         $dispatcher = Admin::getEventDispatcher();
         Admin::setEventDispatcher(clone $dispatcher);
         try {
-            Admin::creating(function (Admin $admin): void {
-                DB::table('admins')->insert([
-                    'username' => $admin->username, 'name' => 'Concurrent winner',
+            // One connection: a real INSERT after Form Request validation, not a concurrency test.
+            Admin::creating(function (Admin $admin) use (&$callbackCount, &$insertedId, $transactionLevel): void {
+                $callbackCount++;
+                $this->assertSame($transactionLevel + 1, $admin->getConnection()->transactionLevel());
+                $this->assertSame(DB::connection(), $admin->getConnection());
+                $insertedId = DB::table('admins')->insertGetId([
+                    'username' => $admin->username, 'name' => 'Post-validation conflict fixture',
                     'password' => $admin->password, 'is_active' => true,
                 ]);
+                $this->assertDatabaseHas('admins', ['id' => $insertedId, 'username' => $admin->username]);
+                // Eloquent's subsequent INSERT must encounter this actual MySQL unique key.
             });
-            $before = Admin::count();
-            $this->postJson(self::URL, $this->payload())->assertUnprocessable()->assertJsonValidationErrors('username');
-            $this->assertSame($before + 1, Admin::count());
+            $this->postJson(self::URL, $payload)->assertUnprocessable()
+                ->assertJsonValidationErrors('username')
+                ->assertExactJson([
+                    'message' => 'The username has already been taken.',
+                    'errors' => ['username' => ['The username has already been taken.']],
+                ]);
+            $this->assertSame(1, $callbackCount);
+            $this->assertNotNull($insertedId);
+            $this->assertDatabaseMissing('admins', ['id' => $insertedId]);
+            $this->assertDatabaseMissing('admins', ['username' => $payload['username']]);
+            $this->assertSame($before, Admin::count());
+            $this->assertSame($auditBefore, DB::table('audit_logs')->count());
+            $this->assertSame($transactionLevel, DB::connection()->transactionLevel());
         } finally {
             Admin::setEventDispatcher($dispatcher);
         }

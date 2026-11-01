@@ -27,7 +27,7 @@ class EnsureAdminHasPermission
             $additionalPermissions !== []
             || $permission === null
             || strlen($permission) > 100
-            || preg_match('/\A[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*\z/', $permission) !== 1
+            || preg_match('/\A[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)*\z/', $permission) !== 1
             || ! $admin->hasPermission($permission)
         ) {
             return response()->json(['message' => 'Forbidden.'], 403);

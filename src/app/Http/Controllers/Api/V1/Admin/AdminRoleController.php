@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Admin\DestroyAdminRoleRequest;
 use App\Http\Requests\Api\V1\Admin\StoreAdminRoleRequest;
 use App\Models\Admin;
+use App\Services\AuditLogService;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,6 +16,10 @@ use Symfony\Component\HttpFoundation\Response;
 
 class AdminRoleController extends Controller
 {
+    public function __construct(private readonly AuditLogService $auditLogs)
+    {
+    }
+
     public function destroy(Request $request, string $id, string $role): Response
     {
         if (
@@ -25,10 +30,12 @@ class AdminRoleController extends Controller
             return response()->json(['message' => 'Administrator not found.'], 404);
         }
 
-        return DB::transaction(function () use ($request, $id, $role): Response {
+        $connection = DB::connection();
+
+        return $connection->transaction(function () use ($request, $id, $role, $connection): Response {
             $actor = $request->user('sanctum');
             // Use the same administrator lock order as assignment.
-            $admins = Admin::whereIn('id', [$actor->id, $id])->orderBy('id')->lockForUpdate()->get();
+            $admins = Admin::on($connection->getName())->whereIn('id', [$actor->id, $id])->orderBy('id')->lockForUpdate()->get();
             $target = $admins->first(fn (Admin $admin): bool => (string) $admin->id === $id);
             $actor = $admins->firstWhere('id', $actor->id);
 
@@ -49,11 +56,11 @@ class AdminRoleController extends Controller
             }
 
             $assignment = ['admin_id' => $target->id, 'role' => $role];
-            if (! DB::table('admin_roles')->where($assignment)->lockForUpdate()->exists()) {
+            if (! $connection->table('admin_roles')->where($assignment)->lockForUpdate()->exists()) {
                 return response()->json(['message' => 'Role assignment not found.'], 404);
             }
 
-            $permissions = DB::table('roles_permissions')->where('role', $role)->sharedLock()->pluck('permission');
+            $permissions = $connection->table('roles_permissions')->where('role', $role)->sharedLock()->pluck('permission');
             // Empty or unreviewed configurations cannot be safely authorized.
             if ($permissions->isEmpty()) {
                 return response()->json(['message' => 'Forbidden.'], 403);
@@ -68,9 +75,25 @@ class AdminRoleController extends Controller
                 }
             }
 
-            if (DB::table('admin_roles')->where($assignment)->delete() !== 1) {
+            $before = $connection->table('admin_roles')->where('admin_id', $target->id)
+                ->orderBy('role')->lockForUpdate()->pluck('role')->all();
+
+            if ($connection->table('admin_roles')->where($assignment)->delete() !== 1) {
                 throw new \RuntimeException('Unexpected role assignment deletion count.');
             }
+
+            $after = $connection->table('admin_roles')->where('admin_id', $target->id)
+                ->orderBy('role')->lockForUpdate()->pluck('role')->all();
+            $this->auditLogs->record(
+                $actor->id,
+                'admin.role_revoked',
+                'admin',
+                $target->id,
+                ['roles' => $before],
+                ['roles' => $after],
+                $request->ip(),
+                $connection->getName()
+            );
 
             return response()->noContent();
         });
@@ -86,10 +109,12 @@ class AdminRoleController extends Controller
             return response()->json(['message' => 'Administrator not found.'], 404);
         }
 
-        return DB::transaction(function () use ($request, $id): JsonResponse {
+        $connection = DB::connection();
+
+        return $connection->transaction(function () use ($request, $id, $connection): JsonResponse {
             $actor = $request->user('sanctum');
             // Serialize assignments involving the same administrators and recheck authorization.
-            $admins = Admin::whereIn('id', [$actor->id, $id])->orderBy('id')->lockForUpdate()->get();
+            $admins = Admin::on($connection->getName())->whereIn('id', [$actor->id, $id])->orderBy('id')->lockForUpdate()->get();
             $target = $admins->first(fn (Admin $admin): bool => (string) $admin->id === $id);
             $actor = $admins->firstWhere('id', $actor->id);
 
@@ -108,7 +133,7 @@ class AdminRoleController extends Controller
                 return response()->json(['message' => 'Forbidden.'], 403);
             }
 
-            $permissions = DB::table('roles_permissions')->where('role', $role)->sharedLock()->pluck('permission');
+            $permissions = $connection->table('roles_permissions')->where('role', $role)->sharedLock()->pluck('permission');
             if ($permissions->isEmpty()) {
                 throw ValidationException::withMessages(['role' => 'The role has no configured permissions.']);
             }
@@ -123,20 +148,37 @@ class AdminRoleController extends Controller
             }
 
             $assignment = ['admin_id' => $target->id, 'role' => $role];
+            $before = $connection->table('admin_roles')->where('admin_id', $target->id)
+                ->orderBy('role')->lockForUpdate()->pluck('role')->all();
             $created = false;
-            if (! DB::table('admin_roles')->where($assignment)->exists()) {
+            if (! $connection->table('admin_roles')->where($assignment)->exists()) {
                 try {
-                    DB::table('admin_roles')->insert($assignment);
+                    $connection->table('admin_roles')->insert($assignment);
                     $created = true;
                 } catch (QueryException $exception) {
                     if (
                         (int) ($exception->errorInfo[1] ?? 0) !== 1062
                         || preg_match("/for key ['`](?:[^'`]+\\.)?admin_roles_admin_id_role_unique['`]/", $exception->errorInfo[2] ?? '') !== 1
-                        || ! DB::table('admin_roles')->where($assignment)->lockForUpdate()->exists()
+                        || ! $connection->table('admin_roles')->where($assignment)->lockForUpdate()->exists()
                     ) {
                         throw $exception;
                     }
                 }
+            }
+
+            if ($created) {
+                $after = $connection->table('admin_roles')->where('admin_id', $target->id)
+                    ->orderBy('role')->lockForUpdate()->pluck('role')->all();
+                $this->auditLogs->record(
+                    $actor->id,
+                    'admin.role_assigned',
+                    'admin',
+                    $target->id,
+                    ['roles' => $before],
+                    ['roles' => $after],
+                    $request->ip(),
+                    $connection->getName()
+                );
             }
 
             return response()->json(['data' => $assignment], $created ? 201 : 200);
