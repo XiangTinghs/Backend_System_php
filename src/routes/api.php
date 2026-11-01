@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\HealthController;
 use App\Http\Controllers\Api\V1\Admin\AuthController;
 use App\Http\Controllers\Api\V1\Admin\AdminController;
+use App\Http\Controllers\Api\V1\Admin\AdminRoleController;
 
 Route::get('/user', function (Request $request) {
     return $request->user();
@@ -18,6 +19,12 @@ Route::prefix('v1')->group(function () {
         Route::post('/login', [AuthController::class, 'login']);
         // 需要管理員 Sanctum Bearer Token；停用帳號仍可登出。
         Route::middleware(['auth:sanctum', 'admin.token'])->group(function () {
+            Route::get('/admins/{id}/roles', [AdminRoleController::class, 'index'])
+                ->middleware(['admin.active', 'admin.permission:admins.roles.read']);
+            Route::post('/admins/{id}/roles', [AdminRoleController::class, 'store'])
+                ->middleware(['admin.active', 'admin.permission:admins.roles.assign']);
+            Route::delete('/admins/{id}/roles/{role}', [AdminRoleController::class, 'destroy'])
+                ->middleware(['admin.active', 'admin.permission:admins.roles.revoke']);
             Route::get('/admins', [AdminController::class, 'index'])
                 ->middleware(['admin.active', 'admin.permission:admins.read']);
             Route::post('/admins', [AdminController::class, 'store'])

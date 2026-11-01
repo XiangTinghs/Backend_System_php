@@ -95,7 +95,7 @@
 - Distinguish session authentication from bearer-token logout: not every Sanctum-authenticated identity has a deletable personal access token.
 
 ### Future Work, Not Implemented Guarantees
-- Administrator deletion, role assignment APIs, permission management APIs, Sanctum token ability enforcement, token expiry/rotation, refresh tokens, and all-device logout are not implemented. They require explicit implementation and behavior tests before being documented as supported.
+- Administrator deletion, role/permission definition management APIs, complete system-wide last-administrator protection, Sanctum token ability enforcement, token expiry/rotation, refresh tokens, and all-device logout are not implemented. Real two-connection concurrency testing is not complete. Do not describe these as supported or verified guarantees.
 - Update this status when code and tests change. Do not implement planned features merely to make code match this document.
 
 ## Implemented Administrator Management and MVP RBAC
@@ -108,4 +108,16 @@
 - RBAC uses only `admins`, `admin_roles`, and `roles_permissions` as its core tables. Do not introduce standalone role/permission definition tables or third-party permission packages within the MVP scope.
 - `admin_roles` has unique `(admin_id, role)` and an `admins.id` foreign key with delete cascade. `roles_permissions` has unique `(role, permission)`. Both mapping tables omit IDs/timestamps and share role type/collation. Shared role-permission definitions must not be deleted with an individual administrator.
 - `Admin::hasPermission()` uses a Query Builder JOIN and `exists()` for multi-role union semantics without permission caches or token snapshots. `admin.permission` accepts a single valid lowercase code and rejects missing/invalid/ungranted permissions with 403.
-- Role assignment and permission management APIs remain unimplemented. String code consistency requires application validation; do not assume a database definition registry exists.
+- Role listing, assignment, and revocation APIs are implemented; role/permission definition management APIs remain unimplemented. String code consistency requires application validation; do not assume a database definition registry exists.
+
+## Implemented Role Assignment Safety and Contracts
+- GET `/api/v1/admin/admins/{id}/roles` requires `admins.roles.read`, including for yourself; returns 200 with `data.admin_id` and ascending `data.roles` (empty array when unassigned).
+- POST on the same path requires `admins.roles.assign`; accepts only `role` and returns 201 for a new assignment or 200 for an existing assignment, with `data.admin_id` and `data.role`.
+- DELETE `/api/v1/admin/admins/{id}/roles/{role}` requires `admins.roles.revoke`; accepts no input fields/query parameters (absent or empty JSON body allowed) and returns 204 without a body. It deletes only the exact assignment and preserves shared permissions and tokens.
+- Preserve the middleware order `auth:sanctum` → `admin.token` → `admin.active` → `admin.permission`. Authentication/endpoint authorization precedes target lookup; invalid or missing targets then return safe 404 before body/path-role validation. POST/DELETE resolve Form Requests inside the transaction after the locked target lookup; do not introduce earlier validation or duplicate target queries incidentally.
+- POST role validation uses lowercase ASCII codes starting with a letter, containing letters/digits/underscores, at most 50 characters; rejects extra fields and unknown roles with 422. DELETE unknown/invalid roles or missing assignments return 404; invalid body returns 422. Policy failures return 403; missing POST role permission configuration returns 422, while DELETE conservatively returns 403.
+- `config/rbac.php` currently knows `viewer`, `manager`, and protected `security_admin`; only `viewer`/`manager` are assignable and revocable. Configuration does not populate database records. Protected roles take precedence over candidate lists, and self-assignment/revocation is forbidden.
+- Both mutations require explicit, non-empty role permission configuration. All permissions must be in `delegable_permissions` (currently only `admins.read`) and held by the operator. Reject sensitive or unreviewed capabilities; do not relax policy or create missing configuration to make a request succeed.
+- Preserve ordered operator/target administrator locks, transaction-local authorization checks, shared role-permission locks, exact unique-key competition handling, and propagation of unrelated SQL errors. DELETE additionally locks the assignment and requires exactly one deleted row.
+- Role changes use live queries and apply on the next request without replacing or revoking tokens. Role assignment is not definition CRUD. Future configuration writers must use compatible synchronization and authorization policies; current locks do not guarantee safety for arbitrary external writes or later permission changes.
+- Existing single-connection race simulation is not a real concurrent transaction test. Do not claim full TOCTOU coverage, complete last-administrator protection, or successful two-connection testing. Add those protections and tests in separately scoped work.
