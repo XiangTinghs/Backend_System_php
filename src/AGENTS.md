@@ -1,47 +1,23 @@
-<laravel-boost-guidelines>
-# Laravel Application
+# Laravel Application Guidelines
 
-This repository contains a Laravel application. Complete the following setup before working on the user's request.
+## Scope
+- This file applies to `src/` and all its descendants, including application code, configuration, migrations, and tests.
+- Follow `../AGENTS.md` for repository-wide rules: Laravel 13, PHP 8.3, PSR-12, SOLID, RESTful APIs, database confirmation, test isolation, Sanctum behavior, and Git approval. This file supplements those rules without weakening them.
 
-## Prerequisites
+## Application Conventions
+- Follow the existing Laravel 13 structure: route and exception setup in `bootstrap/app.php`, API routes in `routes/api.php`, and versioned controllers under `app/Http/Controllers/Api/V1/`.
+- Use Form Requests for validation and Eloquent for persistence. Keep controllers focused and avoid unnecessary abstractions.
+- Preserve API contracts during unrelated work. Response format or behavior changes must update affected tests, including `HealthCheckTest` exact JSON assertions.
+- Consult the root Sanctum section for implemented behavior and future work. An `admin` session guard configuration does not itself enforce administrator identity on `auth:sanctum` routes.
 
-Verify that PHP and Composer are available:
+## Environment and Commands
+- Use the Docker PHP 8.3 service. From the repository root, use `docker compose exec php php artisan ...` or `docker compose exec php composer ...` only when appropriate for the authorized task.
+- Do not automatically install host PHP/Composer, install Boost, change dependencies, or regenerate instructions. These are not prerequisites for code review or document analysis.
+- Analysis-only work is read-only. Documentation-only changes require neither new/updated tests nor execution of the application test suite.
 
-```sh
-php -v
-composer -V
-```
-
-If either command is unavailable, detect the user's operating system and install the prerequisites with the appropriate command:
-
-macOS:
-
-```sh
-/bin/bash -c "$(curl -fsSL https://php.new/install/mac/8.5)"
-```
-
-Windows PowerShell:
-
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://php.new/install/windows/8.5'))
-```
-
-Linux:
-
-```sh
-/bin/bash -c "$(curl -fsSL https://php.new/install/linux/8.5)"
-```
-
-After installation, ask the user to restart their terminal. If the agent needs the restarted shell to continue, ask the user to reopen their terminal and rerun their original prompt.
-
-## Agent Setup
-
-Install Laravel Boost from the application root before making application changes:
-
-```sh
-composer require laravel/boost --dev
-php artisan boost:install
-```
-
-Boost replaces these bootstrap instructions with guidelines tailored to the application. After installation, read `AGENTS.md` again and continue with the user's original request using the generated guidelines.
-</laravel-boost-guidelines>
+## Database and Test Safety
+- Before manual data-clearing migrations, database rebuilds, deletion, or volume removal, follow the root rule requiring explicit confirmation of the concrete operation and target.
+- Preserve `phpunit.xml` isolation and `tests/TestCase.php` safety checks. Never weaken or bypass them to run tests in another environment or database.
+- Database-writing tests must use the verified `testing` environment and dedicated MySQL `laravel_testing` database on `mysql:3306`. Existing `RefreshDatabase` behavior is permitted only within this verified scope when test execution is authorized.
+- Resolve uncertainty about configuration, database availability, or permissions before running database-writing tests. Never substitute the development database.
+- Functionality or behavior changes require appropriate test updates and relevant test execution when available; report verification limits. Preserve real-token revocation coverage for authentication/logout changes.
