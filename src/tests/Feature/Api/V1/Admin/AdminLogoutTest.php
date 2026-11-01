@@ -19,7 +19,7 @@ class AdminLogoutTest extends TestCase
         $response = $this->withToken($token)
             ->postJson('/api/v1/admin/logout');
 
-        $response->assertOk();
+        $response->assertOk()->assertExactJson(['message' => 'Logout successful.']);
 
         $this->assertDatabaseCount('personal_access_tokens', 0);
     }
@@ -28,7 +28,7 @@ class AdminLogoutTest extends TestCase
     {
         $response = $this->postJson('/api/v1/admin/logout');
 
-        $response->assertUnauthorized();
+        $response->assertUnauthorized()->assertExactJson(['message' => 'Unauthenticated.']);
     }
 
 
@@ -52,7 +52,7 @@ class AdminLogoutTest extends TestCase
         // 第二次請求：使用已撤銷的 Token
         $this->withToken($token)
             ->getJson('/api/v1/admin/me')
-            ->assertUnauthorized();
+            ->assertUnauthorized()->assertExactJson(['message' => 'Unauthenticated.']);
     }
 
 
@@ -81,7 +81,7 @@ class AdminLogoutTest extends TestCase
         // 裝置 A 的 Token 應失效
         $this->withToken($tokenA)
             ->getJson('/api/v1/admin/me')
-            ->assertUnauthorized();
+            ->assertUnauthorized()->assertExactJson(['message' => 'Unauthenticated.']);
 
         app('auth')->forgetGuards();
 
@@ -91,4 +91,63 @@ class AdminLogoutTest extends TestCase
             ->assertOk();
     }
 
+    public function test_invalid_token_cannot_logout_or_revoke_other_tokens(): void
+    {
+        $token = Admin::factory()->create()->createToken('device');
+
+        $this->withToken($token->accessToken->getKey() . '|invalid-secret')
+            ->postJson('/api/v1/admin/logout')
+            ->assertUnauthorized()
+            ->assertExactJson(['message' => 'Unauthenticated.']);
+
+        $this->assertModelExists($token->accessToken);
+    }
+
+    public function test_disabled_admin_can_logout_only_current_device(): void
+    {
+        $admin = Admin::factory()->create();
+        $tokenA = $admin->createToken('device-A');
+        $tokenB = $admin->createToken('device-B');
+
+        $this->withToken($tokenA->plainTextToken)->getJson('/api/v1/admin/me')->assertOk();
+        $admin->update(['is_active' => false]);
+        app('auth')->forgetGuards();
+
+        $this->withToken($tokenA->plainTextToken)->postJson('/api/v1/admin/logout')
+            ->assertOk()->assertExactJson(['message' => 'Logout successful.']);
+
+        $this->assertModelMissing($tokenA->accessToken);
+        $this->assertModelExists($tokenB->accessToken);
+        $this->assertDatabaseCount('personal_access_tokens', 1);
+
+        app('auth')->forgetGuards();
+        $this->withToken($tokenA->plainTextToken)->postJson('/api/v1/admin/logout')
+            ->assertUnauthorized()->assertExactJson(['message' => 'Unauthenticated.']);
+
+        app('auth')->forgetGuards();
+        $this->withToken($tokenB->plainTextToken)->getJson('/api/v1/admin/me')
+            ->assertForbidden()
+            ->assertExactJson(['message' => 'Administrator account is disabled.']);
+        $this->assertModelExists($tokenB->accessToken);
+
+        app('auth')->forgetGuards();
+        $this->withToken($tokenB->plainTextToken)->postJson('/api/v1/admin/logout')
+            ->assertOk()->assertExactJson(['message' => 'Logout successful.']);
+        $this->assertModelMissing($tokenB->accessToken);
+    }
+
+    public function test_admin_session_with_invalid_token_cannot_logout(): void
+    {
+        config(['sanctum.guard' => ['admin']]);
+        $admin = Admin::factory()->create();
+        $token = $admin->createToken('device');
+        $this->actingAs($admin, 'admin');
+        $this->assertAuthenticatedAs($admin, 'admin');
+
+        $this->withToken($token->accessToken->getKey() . '|invalid-secret')
+            ->postJson('/api/v1/admin/logout')
+            ->assertUnauthorized()->assertExactJson(['message' => 'Unauthenticated.']);
+
+        $this->assertModelExists($token->accessToken);
+    }
 }

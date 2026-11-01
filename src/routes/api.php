@@ -15,9 +15,9 @@ Route::prefix('v1')->group(function () {
     Route::prefix('admin')->group(function () {
         // 不需要登入
         Route::post('/login', [AuthController::class, 'login']);
-        // 需要 Sanctum Token
-        Route::middleware('auth:sanctum')->group(function () {
-            Route::get('/me', [AuthController::class, 'me']);
+        // 需要管理員 Sanctum Bearer Token；停用帳號仍可登出。
+        Route::middleware(['auth:sanctum', 'admin.token'])->group(function () {
+            Route::get('/me', [AuthController::class, 'me'])->middleware('admin.active');
             Route::post('/logout', [AuthController::class, 'logout']);
         });
     });

@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\EnsureAdminIsActive;
+use App\Http\Middleware\EnsureAdminTokenAuthenticated;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -13,7 +15,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        $middleware->alias([
+            'admin.token' => EnsureAdminTokenAuthenticated::class,
+            'admin.active' => EnsureAdminIsActive::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

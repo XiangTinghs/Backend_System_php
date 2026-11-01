@@ -88,4 +88,28 @@ class AdminLoginTest extends TestCase
                 'password',
             ]);
     }
+    public function test_repeated_login_creates_independent_usable_tokens(): void
+    {
+        $admin = Admin::factory()->create(['password' => 'password123']);
+        $credentials = ['username' => $admin->username, 'password' => 'password123'];
+
+        $first = $this->postJson('/api/v1/admin/login', $credentials)->assertOk();
+        app('auth')->forgetGuards();
+        $second = $this->postJson('/api/v1/admin/login', $credentials)->assertOk();
+
+        $tokenA = $first->json('data.token');
+        $tokenB = $second->json('data.token');
+        $this->assertIsString($tokenA);
+        $this->assertIsString($tokenB);
+        $this->assertNotSame($tokenA, $tokenB);
+        $this->assertDatabaseCount('personal_access_tokens', 2);
+
+        foreach ([$tokenA, $tokenB] as $token) {
+            app('auth')->forgetGuards();
+            $this->withToken($token)->getJson('/api/v1/admin/me')
+                ->assertOk()
+                ->assertJsonPath('data.id', $admin->id)
+                ->assertJsonMissingPath('data.password');
+        }
+    }
 }

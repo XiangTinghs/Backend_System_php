@@ -48,18 +48,6 @@ class AuthController extends Controller
     {
         $admin = $request->user();
 
-        if (! $admin instanceof Admin) {
-            return response()->json([
-                'message' => 'Unauthenticated.',
-            ], 401);
-        }
-
-        if (! $admin->is_active) {
-            return response()->json([
-                'message' => 'Administrator account is disabled.',
-            ], 403);
-        }
-
         return response()->json([
             'data' => [
                 'id' => $admin->id,
@@ -69,8 +57,6 @@ class AuthController extends Controller
             ],
         ]);
     }
-
-
     public function logout(Request $request): JsonResponse
     {
         $admin = $request->user();
@@ -81,5 +67,4 @@ class AuthController extends Controller
             'message' => 'Logout successful.',
         ]);
     }
-
 }
