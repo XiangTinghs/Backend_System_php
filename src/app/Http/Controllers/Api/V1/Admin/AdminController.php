@@ -8,6 +8,7 @@ use App\Http\Requests\Api\V1\Admin\StoreAdminRequest;
 use App\Http\Requests\Api\V1\Admin\UpdateAdminRequest;
 use App\Http\Resources\Api\V1\Admin\AdminResource;
 use App\Models\Admin;
+use App\Services\AuditLogService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\JsonResponse;
@@ -16,44 +17,118 @@ use Illuminate\Validation\ValidationException;
 
 class AdminController extends Controller
 {
-    public function update(UpdateAdminRequest $request): AdminResource
+    public function __construct(private readonly AuditLogService $auditLogs)
     {
-        $admin = $request->targetAdmin();
+    }
 
-        try {
-            $admin->update($request->safe()->only(['username', 'name', 'is_active', 'password']));
-        } catch (QueryException $exception) {
-            if (
-                (int) ($exception->errorInfo[1] ?? 0) !== 1062
-                || preg_match("/for key ['`](?:[^'`]+\\.)?admins_username_unique['`]/", $exception->errorInfo[2] ?? '') !== 1
-            ) {
-                throw $exception;
+    public function update(UpdateAdminRequest $request): AdminResource|JsonResponse
+    {
+        $target = $request->targetAdmin();
+        $connection = $target->getConnection();
+
+        return $connection->transaction(function () use ($request, $target, $connection): AdminResource|JsonResponse {
+            $admin = $target->newQuery()->whereKey($target->getKey())->lockForUpdate()->first();
+            if ($admin === null) {
+                return response()->json(['message' => 'Administrator not found.'], 404);
             }
 
-            throw ValidationException::withMessages(['username' => 'The username has already been taken.']);
-        }
+            $before = ['username' => $admin->username, 'name' => $admin->name, 'is_active' => $admin->is_active];
+            try {
+                $admin->update($request->safe()->only(['username', 'name', 'is_active', 'password']));
+            } catch (QueryException $exception) {
+                $this->handleUsernameConflict($exception);
+            }
 
-        return new AdminResource($admin);
+            $old = [];
+            $new = [];
+            foreach (['username', 'name'] as $field) {
+                if ($admin->wasChanged($field)) {
+                    $old[$field] = $before[$field];
+                    $new[$field] = $admin->{$field};
+                }
+            }
+
+            if ($old !== []) {
+                $this->auditLogs->record(
+                    $request->user('sanctum')->id,
+                    'admin.updated',
+                    'admin',
+                    $admin->id,
+                    $old,
+                    $new,
+                    $request->ip(),
+                    $connection->getName()
+                );
+            }
+            if ($admin->wasChanged('is_active')) {
+                $this->auditLogs->record(
+                    $request->user('sanctum')->id,
+                    $admin->is_active ? 'admin.enabled' : 'admin.disabled',
+                    'admin',
+                    $admin->id,
+                    ['is_active' => $before['is_active']],
+                    ['is_active' => $admin->is_active],
+                    $request->ip(),
+                    $connection->getName()
+                );
+            }
+            if ($admin->wasChanged('password')) {
+                $this->auditLogs->record(
+                    $request->user('sanctum')->id,
+                    'admin.password_changed',
+                    'admin',
+                    $admin->id,
+                    null,
+                    null,
+                    $request->ip(),
+                    $connection->getName()
+                );
+            }
+
+            return new AdminResource($admin);
+        });
     }
 
     public function store(StoreAdminRequest $request): JsonResponse
     {
-        try {
-            $admin = Admin::create($request->safe()->only(['username', 'name', 'password', 'is_active']));
-        } catch (QueryException $exception) {
-            // Match only MySQL duplicate-key errors for the existing username unique index.
-            if (
-                (int) ($exception->errorInfo[1] ?? 0) !== 1062
-                || preg_match("/for key ['`](?:[^'`]+\\.)?admins_username_unique['`]/", $exception->errorInfo[2] ?? '') !== 1
-            ) {
-                throw $exception;
+        $model = new Admin();
+        $connection = $model->getConnection();
+        $admin = $connection->transaction(function () use ($request, $model, $connection): Admin {
+            try {
+                $admin = $model->newQuery()->create($request->safe()->only(['username', 'name', 'password', 'is_active']));
+            } catch (QueryException $exception) {
+                $this->handleUsernameConflict($exception);
             }
 
-            throw ValidationException::withMessages(['username' => 'The username has already been taken.']);
-        }
+            $this->auditLogs->record(
+                $request->user('sanctum')->id,
+                'admin.created',
+                'admin',
+                $admin->id,
+                null,
+                ['username' => $admin->username, 'name' => $admin->name, 'is_active' => $admin->is_active],
+                $request->ip(),
+                $connection->getName()
+            );
+
+            return $admin;
+        });
 
         return (new AdminResource($admin))->response()->setStatusCode(201)
             ->header('Location', url('/api/v1/admin/admins/' . $admin->id));
+    }
+
+    private function handleUsernameConflict(QueryException $exception): never
+    {
+        // Only business-write errors reach this handler; audit errors must propagate unchanged.
+        if (
+            (int) ($exception->errorInfo[1] ?? 0) !== 1062
+            || preg_match("/for key ['`](?:[^'`]+\\.)?admins_username_unique['`]/", $exception->errorInfo[2] ?? '') !== 1
+        ) {
+            throw $exception;
+        }
+
+        throw ValidationException::withMessages(['username' => 'The username has already been taken.']);
     }
 
     public function show(string $id): AdminResource|JsonResponse
