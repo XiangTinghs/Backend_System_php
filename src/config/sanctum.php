@@ -37,7 +37,8 @@ return [
     |
     */
 
-    'guard' => ['web'],
+    // Players have no local session authentication; administrator APIs require bearer tokens.
+    'guard' => [],
 
     /*
     |--------------------------------------------------------------------------
