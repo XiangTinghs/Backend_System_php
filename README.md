@@ -68,6 +68,7 @@ The Laravel application follows a separation-of-concerns approach, with responsi
 - [x] MVP RBAC schema, permission queries, and permission middleware
 - [x] Administrator role listing, assignment, and revocation APIs
 - [x] Transactional administrator/role audit logging and permission-protected Audit Log List API
+- [x] Administrator platform list/detail/create/rename/status APIs with RBAC and transactional audit logging
 
 ### Planned
 
@@ -114,6 +115,66 @@ Usernames must be unique, at most 50 characters, and contain only ASCII letters,
 Create/update reject fields outside their input allowlist, including role and permission fields. New administrators receive no roles or tokens automatically. Updating your own account through the management API returns HTTP 403. Validation failures, including username conflicts, return HTTP 422. Authentication failures return HTTP 401; disabled accounts or missing permissions return HTTP 403. Error responses use `message`, with `errors` for validation failures. Passwords and tokens are not included in management responses.
 
 Disabling an account preserves its existing tokens but blocks protected management access. Logout revokes only the current token and remains available to disabled administrators.
+
+## Platform Management APIs
+
+Platforms are managed by internal administrators. All five routes use `auth:sanctum` → `admin.token` → `admin.active` → `admin.permission:<permission>`.
+
+| Method | Endpoint | Permission | Success |
+|---|---|---|---|
+| GET | `/api/v1/admin/platforms` | `platforms.view` | 200, `data`, `links`, `meta` |
+| GET | `/api/v1/admin/platforms/{id}` | `platforms.view` | 200, `data` |
+| POST | `/api/v1/admin/platforms` | `platforms.manage` | 201, `data`, `Location` |
+| PUT | `/api/v1/admin/platforms/{id}` | `platforms.manage` | 200, `data` |
+| PATCH | `/api/v1/admin/platforms/{id}/status` | `platforms.manage` | 200, `data` |
+
+`platforms.manage` does not imply `platforms.view`. No role receives either permission automatically; the existing role-delegation allowlist is unchanged. There is no platform DELETE API.
+
+Resources expose only `id`, `code`, `name`, boolean `is_active`, and UTC ISO 8601 `created_at` / `updated_at`. Player data is excluded. Missing, invalid, or unsigned-BIGINT-overflow IDs return `404` with `{"message":"Platform not found."}`. Authentication and permission checks precede target lookup and validation; PUT/PATCH target lookup precedes body validation. Authentication failures return 401, disabled administrators or missing permissions return 403, and invalid input returns 422 with `message` and `errors`.
+
+### Create, Rename, and Status
+
+POST accepts only `code`, `name`, and optional `is_active` (default true):
+
+```json
+{"code":"PlatformA","name":"Platform A","is_active":true}
+```
+
+`code` is a permanent identifier set only at creation. It accepts 1–50 ASCII letters, digits, `.`, `_`, and `-`, preserving case. Uniqueness uses the existing MySQL `utf8mb4_0900_as_cs` column collation: `PlatformA` and `platforma` can coexist, while an exact duplicate returns 422. Only MySQL 1062 for `platforms_code_unique` from the business INSERT is translated to a code validation error; unrelated SQL and audit errors propagate. Existing Laravel string-trimming middleware also applies to incoming strings; code is never lowercased.
+
+PUT accepts only `{"name":"New platform name"}`. Name is required, trimmed, nonblank, and at most 100 characters. `code` is rejected even when equal to the current value, and `is_active` is rejected. The controller assigns only the validated name, so request fields cannot mass-assign code or status.
+
+PATCH accepts only `{"is_active":false}` (or true). It uses Laravel's boolean validation, accepting JSON booleans and 0/1 forms; strings such as `"false"` are invalid. Unknown fields/query parameters are rejected on writes. Repeating the existing name or status succeeds without a database update or success audit event.
+
+Disabling a platform preserves players, their statuses and relationships, and administrator tokens. Blocking future external login or wallet operations is outside this feature. The existing player FK uses DELETE RESTRICT; no hard-delete endpoint is provided.
+
+### List Parameters
+
+| Parameter | Contract |
+|---|---|
+| `page` | Integer 1–10000; default 1 |
+| `per_page` | Integer 1–100; default 20 |
+| `search` | Optional nullable string, max 100; grouped code/name substring search |
+| `is_active` | Boolean filter, e.g. `0` or `1` |
+| `sort` | `id`, `code`, `name`, `created_at`, `updated_at`; default `id` |
+| `direction` | `asc` or `desc`; default `desc` |
+
+Unknown query parameters return 422. `%` and `_` are literal search characters, and `!` is escaped explicitly. Search and status filters combine with AND. Non-unique sort fields use ID as a tie-breaker. Code searches follow the code column's case-sensitive collation; name searches follow the name column's collation. Pagination links preserve validated filter/sort parameters.
+
+### Platform Audit Events
+
+| Action | Old / new snapshots |
+|---|---|
+| `platform.created` | null / `code`, `name`, `is_active` |
+| `platform.updated` | Changed `name` before / after |
+| `platform.enabled` | `is_active`: false / true |
+| `platform.disabled` | `is_active`: true / false |
+
+All events use target type `platform`, capture the operator, target ID and Request IP, and are written synchronously on the business connection inside its transaction. Rename/status operations lock the platform before reading old values. Audit failure rolls back the business write. GET, rejected requests and no-op changes do not create success events. The existing Audit Log API can filter these events by action and target type; its separate `audit-logs.view` permission remains required.
+
+Code is added to both audit snapshot allowlists as string/null only. Passwords, tokens, secrets, arbitrary nested values and unrelated fields remain excluded. This does not detect secrets embedded in otherwise allowed business strings.
+
+No schema migration is added or changed. Unique-key competition tests use a real conflicting INSERT on one connection, not two concurrent connections. Row locks do not guarantee protection against arbitrary external SQL writers or configuration changes after endpoint authorization. Code immutability is enforced by the API allowlists and explicit assignments and by the Platform Model update persistence guard. Existing instances reject code changes with LogicException through update(), fill()->save(), direct assignment followed by save(), and quiet saves/updates, including case-only changes. Creation and Factory code assignment remain supported; name and status updates remain available. Reassigning the identical code is allowed by the Model, while update APIs reject the code field even when unchanged. Query Builder updates (including bulk Eloquent builder updates), direct SQL, and deliberate low-level Model state manipulation are outside this protection; no database trigger is added.
 
 ## MVP RBAC
 
@@ -240,7 +301,7 @@ Responses use Laravel Resource pagination with `data`, `links`, and `meta`. Exam
 
 ### Snapshot Safety and Limitations
 
-Both service writes and Resource reads allow only `username`, `name`, `is_active`, `role`, and `roles`. Username/name/role values must be strings, active status must be boolean, and roles must be a list of strings; null values are accepted. Other fields and nested objects/arrays under scalar fields are discarded. Historical JSON is filtered again on output, without loading administrator or token relations. Passwords, hashes, tokens, secrets, authorization fields, and arbitrary Request/Model serialization must not enter snapshots. This is a field/type allowlist, not content-based secret detection inside otherwise permitted strings.
+Both service writes and Resource reads allow only `username`, `name`, `is_active`, `role`, `roles`, and `code`. Username/name/role/code values must be strings, active status must be boolean, and roles must be a list of strings; null values are accepted. Other fields and nested objects/arrays under scalar fields are discarded. Historical JSON is filtered again on output, without loading administrator or token relations. Passwords, hashes, tokens, secrets, authorization fields, and arbitrary Request/Model serialization must not enter snapshots. This is a field/type allowlist, not content-based secret detection inside otherwise permitted strings.
 
 `audit_logs` has nullable operator/target IDs, JSON snapshots, IPv4/IPv6 address storage, and a `created_at` TIMESTAMP without `updated_at`. Indexes cover `(admin_id, created_at)`, `(target_type, target_id, created_at)`, `(action, created_at)`, and `created_at`. No cascading foreign key deletes audit history.
 
@@ -286,7 +347,17 @@ Run the test suite from the repository root using the existing PHP container:
 docker compose exec php php artisan test
 ```
 
-Feature tests cover authentication, token revocation and device isolation, active-account enforcement, RBAC queries/middleware, administrator List, Detail, Create, and Update, and role listing/assignment/revocation, including error precedence and delegation restrictions. Audit tests cover snapshot filtering, business/audit rollback, query filters, UTC boundaries and serialization, pagination limits, and access control. The last verified baseline is 351 passed, 0 failed, and 1289 assertions. Documentation-only changes do not require running application tests. If migrations are prohibited for a verification run, the default `RefreshDatabase` lifecycle must not be allowed to rebuild the schema; use an explicitly verified existing-schema execution approach and report it.
+Feature tests cover authentication, token revocation and device isolation, active-account enforcement, RBAC queries/middleware, administrator List, Detail, Create, and Update, and role listing/assignment/revocation, including error precedence and delegation restrictions. Audit tests cover snapshot filtering, business/audit rollback, query filters, UTC boundaries and serialization, pagination limits, and access control. On 2026-11-04, the Platform Model selection passed 18 tests with 64 assertions, the Issue #7 and affected audit selection passed 189 tests with 944 assertions, and the broader regression selection passed 487 tests with 1965 assertions, zero failures, and no risky tests. These selections overlap and must not be added together. Documentation-only changes do not require running application tests. If migrations are prohibited for a verification run, the default `RefreshDatabase` lifecycle must not be allowed to rebuild the schema; use an explicitly verified existing-schema execution approach and report it.
+
+### Issue #7 Verification Scope (2026-11-04)
+
+Verification used the existing PHP 8.3 container and MySQL `mysql:3306/laravel_testing`. A separate read-only preflight process rejected cached configuration and verified the effective testing environment, actual `SELECT DATABASE()`, UTC Session timezone, required columns, case-sensitive collations, unique indexes, and player FK RESTRICT before PHPUnit started. Successful transactional tests also exercised write permissions.
+
+A temporary runner outside the repository set `RefreshDatabaseState::$migrated = true` only after the preflight succeeded. This retained the existing tests' transaction/rollback lifecycle while avoiding implicit `migrate:fresh`; neither `phpunit.xml`, `tests/TestCase.php`, nor `.env` was changed. Running the default test command without this verified existing-schema setup can invoke RefreshDatabase migrations.
+
+The regression selection excluded `UserModelTest::test_conversion_and_rollback_refuse_existing_rows_without_modifying_them` via a negative PHPUnit filter. Static analysis shows its non-empty-users guard should throw before DDL, but it remains explicitly excluded by user instruction. It was not executed. Its previously authorized actual-database guard remains in place. No migration or schema rebuild was executed, and no development/production database was modified.
+
+Validation after Model hardening: 18 Platform Model tests / 64 assertions passed; 189 Feature/Audit tests / 944 assertions passed; 487 regression tests / 1965 assertions passed (including those selections), zero failures and one case excluded. Model tests cover creation, update(), fill()->save(), direct attribute assignment followed by save(), quiet updates/saves, case-only changes, unchanged persisted data on rejection, and normal name/status updates. PSR-12 check-only validation passed for all 16 changed/new PHP files, and `git diff --check` passed. Real dual-connection races, external integration behavior, and database-level code immutability are not verified guarantees.
 
 ## Development Goals
 

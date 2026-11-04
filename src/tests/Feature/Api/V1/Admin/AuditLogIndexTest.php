@@ -104,6 +104,19 @@ class AuditLogIndexTest extends TestCase
         $this->assertEquals($before, DB::table('audit_logs')->orderBy('id')->get()->toArray());
     }
 
+    public function test_platform_code_snapshot_filters_unexpected_types_and_secrets(): void
+    {
+        $this->authenticate();
+        foreach (['PlatformA', null, ['secret' => 'hidden'], 123, true] as $code) {
+            $id = $this->log(['target_type' => 'platform', 'action' => 'platform.created',
+                'new_values' => json_encode(['code' => $code, 'secret' => 'hidden'])]);
+            $response = $this->getJson(self::URL . '?target_type=platform')->assertOk();
+            $response->assertJsonPath('data.0.id', $id);
+            $this->assertSame(is_string($code) || $code === null ? ['code' => $code] : [], $response->json('data.0.new_values'));
+            $this->assertStringNotContainsString('hidden', $response->getContent());
+        }
+    }
+
     public function test_null_snapshots_and_max_unsigned_id_filters_are_supported(): void
     {
         $this->authenticate();

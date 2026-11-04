@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\V1\Admin\AuthController;
 use App\Http\Controllers\Api\V1\Admin\AdminController;
 use App\Http\Controllers\Api\V1\Admin\AdminRoleController;
 use App\Http\Controllers\Api\V1\Admin\AuditLogController;
+use App\Http\Controllers\Api\V1\Admin\PlatformController;
 
 Route::prefix('v1')->group(function () {
     Route::get('/health', HealthController::class);
@@ -15,6 +16,16 @@ Route::prefix('v1')->group(function () {
         Route::post('/login', [AuthController::class, 'login']);
         // 需要管理員 Sanctum Bearer Token；停用帳號仍可登出。
         Route::middleware(['auth:sanctum', 'admin.token'])->group(function () {
+            Route::get('/platforms', [PlatformController::class, 'index'])
+                ->middleware(['admin.active', 'admin.permission:platforms.view']);
+            Route::get('/platforms/{id}', [PlatformController::class, 'show'])
+                ->middleware(['admin.active', 'admin.permission:platforms.view']);
+            Route::post('/platforms', [PlatformController::class, 'store'])
+                ->middleware(['admin.active', 'admin.permission:platforms.manage']);
+            Route::put('/platforms/{id}', [PlatformController::class, 'update'])
+                ->middleware(['admin.active', 'admin.permission:platforms.manage']);
+            Route::patch('/platforms/{id}/status', [PlatformController::class, 'status'])
+                ->middleware(['admin.active', 'admin.permission:platforms.manage']);
             Route::get('/audit-logs', [AuditLogController::class, 'index'])
                 ->middleware(['admin.active', 'admin.permission:audit-logs.view']);
             Route::get('/admins/{id}/roles', [AdminRoleController::class, 'index'])

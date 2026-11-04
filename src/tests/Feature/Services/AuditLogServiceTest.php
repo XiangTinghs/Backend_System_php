@@ -50,6 +50,19 @@ class AuditLogServiceTest extends TestCase
         $this->assertEquals($new, json_decode($stored->new_values, true));
     }
 
+    public function test_platform_code_snapshot_is_string_or_null_only(): void
+    {
+        $service = app(AuditLogService::class);
+        foreach (['PlatformA', null] as $value) {
+            $log = $service->record(null, 'platform.created', 'platform', newValues: ['code' => $value])->fresh();
+            $this->assertSame(['code' => $value], $log->new_values);
+        }
+        foreach ([['secret' => 'hidden'], (object) ['secret' => 'hidden'], 123, true] as $value) {
+            $log = $service->record(null, 'platform.created', 'platform', newValues: ['code' => $value])->fresh();
+            $this->assertSame([], $log->new_values);
+        }
+    }
+
     public function test_nullable_fields_and_ipv4_are_supported(): void
     {
         $service = app(AuditLogService::class);

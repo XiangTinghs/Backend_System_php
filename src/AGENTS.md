@@ -21,3 +21,9 @@
 - Database-writing tests must use the verified `testing` environment and dedicated MySQL `laravel_testing` database on `mysql:3306`. Existing `RefreshDatabase` behavior is permitted only within this verified scope when test execution is authorized.
 - Resolve uncertainty about configuration, database availability, or permissions before running database-writing tests. Never substitute the development database.
 - Functionality or behavior changes require appropriate test updates and relevant test execution when available; report verification limits. Preserve real-token revocation coverage for authentication/logout changes.
+
+## Platform Management
+
+- Follow the root platform contracts: creation-only code, name-only PUT, status-only PATCH, explicit field allowlists, and existing case-sensitive unique index behavior. Do not add platform deletion or implicit permission grants.
+- Preserve the Platform Model update persistence guard: code changes (including case-only and quiet saves) throw LogicException; creation and normal name/status updates remain supported. Query Builder/bulk updates and direct SQL are outside its protection.
+- Preserve same-connection transactional platform audit writes and matching service/Resource code snapshot filtering. Future external authentication and wallet behavior are outside this scope.

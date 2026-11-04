@@ -31,7 +31,7 @@ class AuditLogResource extends JsonResource
         if (! is_array($values)) {
             return $safe;
         }
-        foreach (['username', 'name', 'is_active', 'role', 'roles'] as $field) {
+        foreach (['username', 'name', 'is_active', 'role', 'roles', 'code'] as $field) {
             if (! array_key_exists($field, $values)) {
                 continue;
             }
@@ -39,7 +39,7 @@ class AuditLogResource extends JsonResource
             if (
                 $value === null
                 || ($field === 'is_active' && is_bool($value))
-                || (in_array($field, ['username', 'name', 'role'], true) && is_string($value))
+                || (in_array($field, ['username', 'name', 'role', 'code'], true) && is_string($value))
                 || ($field === 'roles' && is_array($value) && array_is_list($value)
                     && count(array_filter($value, 'is_string')) === count($value))
             ) {
