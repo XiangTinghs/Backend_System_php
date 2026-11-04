@@ -7,7 +7,7 @@ use App\Models\AuditLog;
 class AuditLogService
 {
     // Fixed snapshot schema: never accept caller-supplied allowlists or arbitrary nested payloads.
-    private const SNAPSHOT_FIELDS = ['username', 'name', 'is_active', 'role', 'roles'];
+    private const SNAPSHOT_FIELDS = ['username', 'name', 'is_active', 'role', 'roles', 'code'];
 
     public function record(
         ?int $adminId,
@@ -53,7 +53,7 @@ class AuditLogService
                 $safe[$field] = null;
             } elseif ($field === 'is_active' && is_bool($value)) {
                 $safe[$field] = $value;
-            } elseif (in_array($field, ['username', 'name', 'role'], true) && is_string($value)) {
+            } elseif (in_array($field, ['username', 'name', 'role', 'code'], true) && is_string($value)) {
                 $safe[$field] = $value;
             } elseif (
                 $field === 'roles' && is_array($value) && array_is_list($value)

@@ -8,6 +8,7 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use PHPUnit\Framework\Attributes\DataProvider;
 use RuntimeException;
@@ -103,8 +104,20 @@ class UserModelTest extends TestCase
 
     public function test_conversion_and_rollback_refuse_existing_rows_without_modifying_them(): void
     {
-        $player = User::factory()->create();
         $migration = require database_path('migrations/2026_11_02_000002_convert_users_to_platform_players.php');
+        $connection = DB::connection($migration->getConnection());
+
+        // Verify the actual migration connection before creating data or invoking either method.
+        if (
+            ! app()->environment('testing')
+            || $connection->getDriverName() !== 'mysql'
+            || $connection->getDatabaseName() !== 'laravel_testing'
+            || $connection->selectOne('SELECT DATABASE() AS database_name')->database_name !== 'laravel_testing'
+        ) {
+            throw new RuntimeException('Migration safety tests must use the laravel_testing MySQL database.');
+        }
+
+        $player = User::factory()->create();
         foreach (['up', 'down'] as $method) {
             try {
                 $migration->$method();
