@@ -34,6 +34,16 @@ return [
 
     'stores' => [
 
+        // Dedicated shared primary-MySQL store; independent of Admin/default cache and rate limiter.
+        'platform_api_limiter' => [
+            'driver' => 'database',
+            'connection' => 'mysql',
+            'table' => 'platform_api_rate_limits',
+            'prefix' => env('PLATFORM_API_RATE_LIMIT_PREFIX', 'platform-api:'),
+            'lock_connection' => 'mysql',
+            'lock_table' => 'cache_locks',
+        ],
+
         'array' => [
             'driver' => 'array',
             'serialize' => false,
