@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use LogicException;
 
 class Platform extends Model
@@ -27,6 +28,16 @@ class Platform extends Model
     protected function casts(): array
     {
         return ['is_active' => 'boolean'];
+    }
+
+    public function jwtIssuer(): HasOne
+    {
+        return $this->hasOne(PlatformJwtIssuer::class);
+    }
+
+    public function jwtKeys(): HasMany
+    {
+        return $this->hasMany(PlatformJwtKey::class);
     }
 
     public function users(): HasMany

@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\Admin\AdminRoleController;
 use App\Http\Controllers\Api\V1\Admin\AuditLogController;
 use App\Http\Controllers\Api\V1\Admin\PlatformController;
 use App\Http\Controllers\Api\V1\Admin\PlayerController;
+use App\Http\Controllers\Api\V1\Admin\PlatformKeyController;
 
 Route::prefix('v1')->group(function () {
     Route::get('/health', HealthController::class);
@@ -56,6 +57,22 @@ Route::prefix('v1')->group(function () {
                 ->middleware(['admin.active', 'admin.permission:players.view']);
             Route::patch('/players/{id}/status', [PlayerController::class, 'status'])
                 ->middleware(['admin.active', 'admin.permission:players.manage']);
+
+            Route::get('/platforms/{id}/keys', [PlatformKeyController::class, 'index'])
+                ->middleware(['admin.active', 'admin.permission:platforms.keys.view']);
+            Route::post('/platforms/{id}/keys', [PlatformKeyController::class, 'store'])
+                ->middleware(['admin.active', 'admin.permission:platforms.keys.register']);
+            Route::patch('/platforms/{id}/keys/{keyId}/status', [PlatformKeyController::class, 'status'])
+                ->middleware(['admin.active', 'admin.permission:platforms.keys.manage']);
+            Route::post('/platforms/{id}/keys/{keyId}/revoke', [PlatformKeyController::class, 'revoke'])
+                ->middleware(['admin.active', 'admin.permission:platforms.keys.revoke']);
+            Route::get('/platforms/{id}/keys/{keyId}', [PlatformKeyController::class, 'show'])
+                ->middleware(['admin.active', 'admin.permission:platforms.keys.view']);
         });
+    });
+
+    Route::prefix('platform')->middleware('platform.jwt')->group(function () {
+        Route::post('/players/resolve', \App\Http\Controllers\Api\V1\Platform\PlayerResolveController::class)
+            ->middleware('platform.resolve.limit')->name('platform.players.resolve');
     });
 });

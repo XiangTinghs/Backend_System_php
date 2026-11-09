@@ -16,7 +16,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // Resolve must reject identity whitespace rather than silently normalizing it.
+        $resolve = fn (Request $request) => $request->isMethod('POST') && $request->is('api/v1/platform/players/resolve');
+        $middleware->trimStrings(except: [$resolve]);
+        $middleware->convertEmptyStringsToNull(except: [$resolve]);
         $middleware->alias([
+            'platform.resolve.limit' => \App\Http\Middleware\LimitPlatformResolveRequests::class,
+            'platform.jwt' => \App\Http\Middleware\VerifyPlatformJwt::class,
             'admin.token' => EnsureAdminTokenAuthenticated::class,
             'admin.active' => EnsureAdminIsActive::class,
             'admin.permission' => EnsureAdminHasPermission::class,

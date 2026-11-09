@@ -13,7 +13,7 @@ The project focuses on RESTful API development, authentication, role-based acces
 | Web Server | Nginx |
 | Containerization | Docker / Docker Compose |
 | API | RESTful API |
-| Authentication | Laravel Sanctum |
+| Authentication | Laravel Sanctum (Admin), RS256 JWT (Platform) |
 | ORM | Eloquent ORM |
 | Testing | Laravel Feature Tests |
 | Version Control | Git / GitHub |
@@ -30,11 +30,13 @@ The project focuses on RESTful API development, authentication, role-based acces
 - [x] Platform database schema and model relationships
 - [x] Platform management APIs
 - [x] Administrator player management APIs
+- [x] Platform JWT verification and administrator public-key lifecycle APIs ([contract](docs/platform-jwt-authentication.md), [controlled permission operations](docs/platform-key-permission-operations.md))
+- [x] JWT-protected Player Resolve API with persistent idempotency ([contract](docs/player-resolve-api.md))
+- [x] Per-platform Resolve rate limits and controlled expired-idempotency cleanup ([operations](docs/platform-api-operations.md))
 - [x] Automated feature testing
 
 ## Planned Features
 
-- [ ] External platform JWT authentication
 - [ ] Secure platform-to-game API integration
 - [ ] Player login and session management
 - [ ] Transfer wallet operations
