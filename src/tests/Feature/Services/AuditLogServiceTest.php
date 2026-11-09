@@ -162,4 +162,17 @@ class AuditLogServiceTest extends TestCase
         $this->assertSame($before, AuditLog::count());
         $this->assertSame('Before', $admin->fresh()->name);
     }
+    public function test_invalid_decimal_string_target_ids_are_rejected_before_writes(): void
+    {
+        foreach (['0', '-1', '01', '1.0', '18446744073709551616', 'invalid'] as $id) {
+            try {
+                app(AuditLogService::class)->record(null, 'player.enabled', 'player', $id);
+                $this->fail('Expected invalid target ID rejection.');
+            } catch (\InvalidArgumentException $exception) {
+                $this->assertSame('Invalid unsigned BIGINT target ID.', $exception->getMessage());
+            }
+        }
+        $this->assertSame(0, AuditLog::count());
+    }
+
 }

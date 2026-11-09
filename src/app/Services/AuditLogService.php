@@ -3,22 +3,28 @@
 namespace App\Services;
 
 use App\Models\AuditLog;
+use App\Support\UnsignedBigInt;
+use InvalidArgumentException;
 
 class AuditLogService
 {
     // Fixed snapshot schema: never accept caller-supplied allowlists or arbitrary nested payloads.
-    private const SNAPSHOT_FIELDS = ['username', 'name', 'is_active', 'role', 'roles', 'code'];
+    private const SNAPSHOT_FIELDS = ['username', 'name', 'is_active', 'role', 'roles', 'code', 'status'];
 
     public function record(
         ?int $adminId,
         string $action,
         string $targetType,
-        ?int $targetId = null,
+        int|string|null $targetId = null,
         ?array $oldValues = null,
         ?array $newValues = null,
         ?string $ipAddress = null,
         ?string $connection = null
     ): AuditLog {
+        if (is_string($targetId) && ! UnsignedBigInt::valid($targetId)) {
+            throw new InvalidArgumentException('Invalid unsigned BIGINT target ID.');
+        }
+
         $log = new AuditLog();
         // Use the caller's connection when its transaction uses a non-default connection.
         $log->setConnection($connection);
@@ -49,8 +55,10 @@ class AuditLogService
             }
 
             $value = $values[$field];
-            if ($value === null) {
+            if ($value === null && $field !== 'status') {
                 $safe[$field] = null;
+            } elseif ($field === 'status' && is_int($value) && in_array($value, [0, 1], true)) {
+                $safe[$field] = $value;
             } elseif ($field === 'is_active' && is_bool($value)) {
                 $safe[$field] = $value;
             } elseif (in_array($field, ['username', 'name', 'role', 'code'], true) && is_string($value)) {

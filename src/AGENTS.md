@@ -5,6 +5,8 @@
 - Follow `../AGENTS.md` for repository-wide rules: Laravel 13, PHP 8.3, PSR-12, SOLID, RESTful APIs, database confirmation, test isolation, Sanctum behavior, and Git approval. This file supplements those rules without weakening them.
 
 ## Application Conventions
+
+- Keep API routes in chronological implementation order (oldest first). Append new routes below existing routes within the appropriate middleware/prefix group; preserve required static-before-parameter route precedence when paths could conflict.
 - Follow the existing Laravel 13 structure: route and exception setup in `bootstrap/app.php`, API routes in `routes/api.php`, and versioned controllers under `app/Http/Controllers/Api/V1/`.
 - Use Form Requests for validation and Eloquent for persistence. Keep controllers focused and avoid unnecessary abstractions.
 - Preserve API contracts during unrelated work. Response format or behavior changes must update affected tests, including `HealthCheckTest` exact JSON assertions.
@@ -27,3 +29,10 @@
 - Follow the root platform contracts: creation-only code, name-only PUT, status-only PATCH, explicit field allowlists, and existing case-sensitive unique index behavior. Do not add platform deletion or implicit permission grants.
 - Preserve the Platform Model update persistence guard: code changes (including case-only and quiet saves) throw LogicException; creation and normal name/status updates remain supported. Query Builder/bulk updates and direct SQL are outside its protection.
 - Preserve same-connection transactional platform audit writes and matching service/Resource code snapshot filtering. Future external authentication and wallet behavior are outside this scope.
+
+## Player Management
+
+- Follow the root Issue #8 player contracts: independent view/manage permissions, safe unsigned BIGINT handling, explicit Resource fields, query allowlists, case-sensitive external IDs and documented global trimming.
+- PATCH accepts only JSON integer status 0/1 with no query parameters. Preserve auth/permission → target lookup → validation → transaction/locked reread ordering. Unknown existing states return 409; no-ops do not save or audit.
+- Preserve synchronous same-connection player audit and matching Service/Resource status filters. Do not add migrations, permission grants, identity/login/name edits, wallet/session/integration features or concurrency guarantees.
+- Player tests were unexecuted in phase two; authorized phase-four dedicated and safe regression selections passed (64/339 and 543/2263 tests/assertions). Keep root verification limits, testing safety rules, existing-schema preflight and direct Migration/DDL exclusions for later execution.
