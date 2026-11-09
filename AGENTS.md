@@ -28,6 +28,8 @@
 - Use Laravel Pint in check-only mode for reviews; use its PSR-12 preset when checking this standard. Limit formatting changes to the authorized task.
 
 ## API Development
+
+- Keep API routes in chronological implementation order (oldest first). Append new routes below existing routes within the appropriate middleware/prefix group; preserve required static-before-parameter route precedence when paths could conflict.
 - Follow RESTful API design principles.
 - Use consistent JSON response structures.
 - Implement proper HTTP status codes.
@@ -148,3 +150,13 @@
 - Audit events: platform.created (null → code/name/is_active), platform.updated (changed name only), platform.enabled/platform.disabled (is_active only), target_type platform. Record actor/target/IP synchronously on the same Connection and transaction. Updates lock the target before snapshots; failures roll back business data. GET/rejected/no-op operations create no success audit.
 - Audit service and Resource accept code as string/null in addition to existing snapshot fields; preserve type filtering and sensitive-data exclusions. No migrations are needed for these APIs. Real two-connection concurrency verification and database-enforced code immutability remain unimplemented.
 - Verification on 2026-11-04: Platform Model selection 18 tests/64 assertions; Feature/Audit selection 189 tests/944 assertions; regression selection 487 tests/1965 assertions, zero failures. Selections overlap. The direct Migration-invoking UserModelTest case was excluded by explicit user instruction; do not describe it as executed. Existing-schema regression used a temporary runner with preflight and RefreshDatabaseState::$migrated set, preserving transaction isolation without schema rebuilds. See README for scope and limits.
+
+## Implemented Player Management (Issue #8)
+
+- GET list/detail and status-only PATCH under `/api/v1/admin/players` use `auth:sanctum` → `admin.token` → `admin.active` → `admin.permission`. GET requires `players.view`; PATCH requires independent `players.manage`. No automatic grants or delegation expansion.
+- Resources expose only id/platform_id/external_user_id/name/status/last_login_at/created_at/updated_at, with UTC timestamps. Preserve unsigned BIGINT IDs without integer truncation; player IDs above PHP_INT_MAX serialize as decimal strings. Audit target IDs additionally accept validated decimal strings; other identity typing remains unchanged.
+- List uses exact case-sensitive external ID filtering, grouped literal substring search, AND filters, fixed sort allowlist and ID tie-breakers. Pagination limits match Platform. Unknown query parameters are rejected. Global trimming/empty-to-null remains part of the contract; external IDs are not lowercased.
+- PATCH requires only JSON integer status 0/1 and no query parameters. Auth/permission precedes target existence, then body validation, then same-connection transaction/locked reread. Missing targets return safe 404. Existing status 2–255 returns 409 unchanged; reads preserve those values. No-op returns 200 without save, timestamp change or audit.
+- Status writes synchronously audit player.enabled/player.disabled, target_type player, integer 0/1 snapshots, operator/target/IP on the business connection and transaction. Service and Resource status allowlists exclude null, booleans, floats, strings, out-of-range integers and nested values. Audit failure rolls back the business write.
+- No migrations, automatic permission data, player creation/deletion, identity/name/login edits, session, wallet or external platform integration. Disabled-platform players remain manageable. Row locks are not proof of full concurrency protection.
+- Phase two wrote tests without execution. Phase-four verification on 2026-11-09 passed the dedicated selection (64 tests/339 assertions) and safe regression selection (543 tests/2263 assertions), zero failures/errors/risky tests; selections overlap. The direct Migration-invoking UserModelTest case remained excluded. Temporary runner preflight, DDL blocking and transaction rollback preserved schema/migration/persistent-row fingerprints; AUTO_INCREMENT counters were excluded. Preserve these safety checks for future runs. Large-ID tests cover serialization/bindings/audit persistence, not a full status mutation on a stored player above PHP_INT_MAX.
